@@ -1,4 +1,4 @@
-# ========== Flask API للسبام الفائق ==========
+# ========== Flask API للسبام الفائق - نسخة مصححة ==========
 from flask import Flask, request, jsonify
 import threading
 import time
@@ -8,7 +8,6 @@ import os
 import asyncio
 import urllib3
 from datetime import datetime
-from typing import Dict, Optional, List, Tuple
 import httpx
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -28,9 +27,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # ========== الإعدادات الأساسية ==========
-API_KEY = "xza-hot"  # غير هذا بمفتاح سري
+API_KEY = "your-secret-api-key-here"  # غير هذا بمفتاح سري
 MAX_ACCOUNTS_PER_USER = 500
-MAX_CONCURRENT_TASKS = 100
 REQUESTS_PER_ACCOUNT = 20
 
 # User Agents متنوعة
@@ -49,14 +47,21 @@ def load_accounts():
     if not os.path.exists("accounts.txt"):
         logger.error("ملف accounts.txt غير موجود!")
         # حسابات تجريبية إذا الملف مش موجود
-        return {"test1": "pass1", "test2": "pass2"}
+        accounts = {"test1": "pass1", "test2": "pass2"}
+        return accounts
     
-    with open("accounts.txt", 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and ':' in line and not line.startswith('#'):
-                uid, pwd = line.split(':', 1)
-                accounts[uid.strip()] = pwd.strip()
+    try:
+        with open("accounts.txt", 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and ':' in line and not line.startswith('#'):
+                    parts = line.split(':', 1)
+                    if len(parts) == 2:
+                        uid, pwd = parts
+                        accounts[uid.strip()] = pwd.strip()
+    except Exception as e:
+        logger.error(f"خطأ في قراءة الملف: {e}")
+        accounts = {"test1": "pass1", "test2": "pass2"}
     
     logger.info(f"✅ تم تحميل {len(accounts)} حساب")
     return accounts
@@ -68,14 +73,14 @@ active_sessions = {}  # {session_id: {'target': str, 'accounts': list, 'active':
 jwt_cache = {}        # {uid: {'token': str, 'expiry': float}}
 
 # ========== دوال التشفير ==========
-def encrypt_api(plain_text: str) -> str:
+def encrypt_api(plain_text):
     plain_text = bytes.fromhex(plain_text)
     key = bytes([89,103,38,116,99,37,68,69,117,104,54,37,90,99,94,56])
     iv  = bytes([54,111,121,90,68,114,50,50,69,51,121,99,104,106,77,37])
     cipher = AES.new(key, AES.MODE_CBC, iv)
     return cipher.encrypt(pad(plain_text, AES.block_size)).hex()
 
-def Encrypt_ID(x: int) -> str:
+def Encrypt_ID(x):
     x = int(x)
     dec = ['80','81','82','83','84','85','86','87','88','89','8a','8b','8c','8d','8e','8f',
            '90','91','92','93','94','95','96','97','98','99','9a','9b','9c','9d','9e','9f',
@@ -91,13 +96,14 @@ def Encrypt_ID(x: int) -> str:
         for _ in range(5):
             x = x / 128
             idx = int((x - int(x)) * 128)
-            result = dec[idx] + result
+            if 0 <= idx < len(dec):
+                result = dec[idx] + result
         return result
     except:
         return ""
 
 # ========== جلب JWT سريع مع كاش ==========
-async def get_jwt(uid: str, password: str) -> Optional[str]:
+async def get_jwt(uid, password):
     if uid in jwt_cache and time.time() < jwt_cache[uid]['expiry']:
         return jwt_cache[uid]['token']
     
@@ -110,8 +116,8 @@ async def get_jwt(uid: str, password: str) -> Optional[str]:
                 if token and token.count('.') >= 2:
                     jwt_cache[uid] = {'token': token, 'expiry': time.time() + 3600}
                     return token
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"خطأ في جلب JWT: {e}")
     return None
 
 # ========== إرسال طلب الصداقة ==========
@@ -121,7 +127,7 @@ FRIEND_URLS = [
     "https://clientbp.ggwhitehawk.com/RequestAddingFriend",
 ]
 
-async def send_friend_request(target_id: str, uid: str, password: str, session: httpx.AsyncClient) -> bool:
+async def send_friend_request(target_id, uid, password, session):
     token = await get_jwt(uid, password)
     if not token:
         return False
@@ -138,53 +144,60 @@ async def send_friend_request(target_id: str, uid: str, password: str, session: 
         'X-Unity-Version': '2018.4.11f1'
     }
 
-    encrypted_id = Encrypt_ID(int(target_id))
-    if not encrypted_id:
-        return False
-    
-    payload_hex = f'08a7c4839f1e10{encrypted_id}1801'
-    data = bytes.fromhex(encrypt_api(payload_hex))
+    try:
+        encrypted_id = Encrypt_ID(int(target_id))
+        if not encrypted_id:
+            return False
+        
+        payload_hex = f'08a7c4839f1e10{encrypted_id}1801'
+        data = bytes.fromhex(encrypt_api(payload_hex))
 
-    for url in FRIEND_URLS:
-        try:
-            if 'ggbluefox' in url:
-                headers['Host'] = 'clientbp.common.ggbluefox.com'
-            elif 'ggwhitehawk' in url:
-                headers['Host'] = 'clientbp.ggwhitehawk.com'
-            else:
-                headers['Host'] = 'clientbp.ggblueshark.com'
-                
-            response = await session.post(url, headers=headers, data=data)
-            if response.status_code == 200:
-                return True
-            elif response.status_code == 503:
+        for url in FRIEND_URLS:
+            try:
+                if 'ggbluefox' in url:
+                    headers['Host'] = 'clientbp.common.ggbluefox.com'
+                elif 'ggwhitehawk' in url:
+                    headers['Host'] = 'clientbp.ggwhitehawk.com'
+                else:
+                    headers['Host'] = 'clientbp.ggblueshark.com'
+                    
+                response = await session.post(url, headers=headers, data=data, timeout=10)
+                if response.status_code == 200:
+                    return True
+                elif response.status_code == 503:
+                    continue
+            except:
                 continue
-        except:
-            continue
+    except Exception as e:
+        logger.error(f"خطأ في الإرسال: {e}")
+    
     return False
 
 # ========== سبام لكل حساب ==========
-async def account_spammer(target_id: str, uid: str, password: str, request_count: int = REQUESTS_PER_ACCOUNT):
+async def account_spammer(target_id, uid, password, request_count):
     success = 0
     failed = 0
     
-    async with httpx.AsyncClient(verify=False, timeout=30) as session:
-        for i in range(request_count):
-            try:
-                if await send_friend_request(target_id, uid, password, session):
-                    success += 1
-                else:
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=30) as session:
+            for i in range(request_count):
+                try:
+                    if await send_friend_request(target_id, uid, password, session):
+                        success += 1
+                    else:
+                        failed += 1
+                        
+                    if i % 50 == 0 and i > 0:
+                        await asyncio.sleep(0.1)
+                except:
                     failed += 1
-                    
-                if i % 50 == 0:
-                    await asyncio.sleep(0.1)
-            except:
-                failed += 1
+    except Exception as e:
+        logger.error(f"خطأ في account_spammer: {e}")
     
     return success, failed
 
 # ========== المدير الرئيسي للسبام ==========
-def spam_worker(session_id: str, target_id: str, accounts: List[Tuple[str, str]]):
+def spam_worker(session_id, target_id, accounts):
     """تشغيل السبام في thread منفصل"""
     logger.info(f"🚀 بدء سبام للجلسة {session_id} على {target_id}")
     
@@ -194,26 +207,31 @@ def spam_worker(session_id: str, target_id: str, accounts: List[Tuple[str, str]]
     total_success = 0
     total_failed = 0
     account_index = 0
+    accounts_list = list(accounts)  # تحويل للقائمة
     
     while session_id in active_sessions and active_sessions[session_id]['active']:
-        if account_index >= len(accounts):
+        if account_index >= len(accounts_list):
             account_index = 0
-            random.shuffle(accounts)
+            random.shuffle(accounts_list)
         
-        uid, pwd = accounts[account_index]
+        uid, pwd = accounts_list[account_index]
         account_index += 1
         
         logger.info(f"📤 حساب {uid} يبدأ بإرسال {REQUESTS_PER_ACCOUNT} طلب")
         
-        success, failed = loop.run_until_complete(
-            account_spammer(target_id, uid, pwd, REQUESTS_PER_ACCOUNT)
-        )
-        
-        total_success += success
-        total_failed += failed
+        try:
+            success, failed = loop.run_until_complete(
+                account_spammer(target_id, uid, pwd, REQUESTS_PER_ACCOUNT)
+            )
+            
+            total_success += success
+            total_failed += failed
+        except Exception as e:
+            logger.error(f"خطأ في تشغيل account_spammer: {e}")
+            total_failed += REQUESTS_PER_ACCOUNT
         
         if account_index % 5 == 0:
-            logger.info(f"📊 تقدم: {account_index}/{len(accounts)} حسابات - نجاح: {total_success}, فشل: {total_failed}")
+            logger.info(f"📊 تقدم: {account_index}/{len(accounts_list)} حسابات - نجاح: {total_success}, فشل: {total_failed}")
     
     loop.close()
     
@@ -224,6 +242,7 @@ def spam_worker(session_id: str, target_id: str, accounts: List[Tuple[str, str]]
             'total': total_success + total_failed
         }
         active_sessions[session_id]['active'] = False
+        logger.info(f"✅ انتهت الجلسة {session_id} - نجاح: {total_success}, فشل: {total_failed}")
 
 # ========== مسار الصفحة الرئيسية ==========
 @app.route('/', methods=['GET'])
@@ -231,6 +250,7 @@ def home():
     return jsonify({
         'name': 'Spam API',
         'version': '1.0',
+        'status': 'running',
         'endpoints': {
             '/spam': 'POST - بدء سبام جديد',
             '/stop': 'POST - إيقاف سبام',
@@ -259,10 +279,12 @@ def start_spam():
     
     # التحقق من الحسابات
     accounts_list = list(ALL_ACCOUNTS.items())
-    if len(accounts_list) < MAX_ACCOUNTS_PER_USER:
+    if len(accounts_list) < 2:  # على الأقل حسابين
         return jsonify({'error': 'Not enough accounts'}), 400
     
-    selected = random.sample(accounts_list, MAX_ACCOUNTS_PER_USER)
+    # اختيار حسابات
+    accounts_count = min(MAX_ACCOUNTS_PER_USER, len(accounts_list))
+    selected = random.sample(accounts_list, accounts_count)
     
     # إنشاء معرف جلسة
     session_id = f"{user_id}_{int(time.time())}"
@@ -342,7 +364,7 @@ def get_status():
         'target': session['target'],
         'active': session['active'],
         'user': session['user'],
-        'running_time': time.time() - session['start_time'],
+        'running_time': round(time.time() - session['start_time'], 2),
         'result': session['result']
     })
 
@@ -390,6 +412,7 @@ def cleanup_loop():
 if __name__ == "__main__":
     logger.info("✅ Flask API للسبام الفائق يعمل...")
     logger.info(f"⚡ كل حساب سيرسل {REQUESTS_PER_ACCOUNT} طلب")
+    logger.info(f"📊 إجمالي الحسابات: {len(ALL_ACCOUNTS)}")
     
     # تشغيل thread التنظيف
     cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
