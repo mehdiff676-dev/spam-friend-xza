@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # ========== الإعدادات الأساسية ==========
-API_KEY = "your-secret-api-key-here"  # غير هذا بمفتاح سري
+API_KEY = "mehdik!ng"  # غير هذا بمفتاح سري
 MAX_ACCOUNTS_PER_USER = 500
-REQUESTS_PER_ACCOUNT = 20
+REQUESTS_PER_ACCOUNT = 40
 
 # User Agents متنوعة
 USER_AGENTS = [
